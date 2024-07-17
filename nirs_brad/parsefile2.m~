@@ -1,0 +1,134 @@
+%% This function parses the data CSV files
+function [info,data,mrkData]=parsefile2(filen)
+
+% No heade
+
+fprintf('Loading %s...\n',filen);
+
+% Load the data file
+fid=fopen(filen,'r');
+
+numHeaderLines=1;
+line=fgetl(fid);  % Figure out the number of columns based on the header
+
+while(~(length(line)==4&&contains(line(1:4),'Data')))
+    line=fgetl(fid);  % Figure out the number of columns based on the header
+    numHeaderLines=numHeaderLines+1;
+end
+
+lineHeader=fgetl(fid);  % Get Header Line
+lineData1=fgetl(fid);  % Get first Data Line
+
+if(sum(lineData1==',')>1)
+    delim=',';
+elseif(sum(lineData1==9)>1)
+    delim=char(9); %tab
+end
+
+headerParts=strsplit(lineHeader,delim);
+
+numDataParts=length(headerParts);
+numWv=sum(contains(headerParts,'CH'));
+mrkCol=contains(headerParts,'Mark');
+numCh=numWv/2;
+
+
+%Start of data
+dIdx=numHeaderLines;
+%%
+
+frewind(fid);
+%Parse the header
+info = struct;
+for i=1:dIdx
+    fld=fgetl(fid);
+    if(contains(fld,'Data'))
+       continue
+    end
+
+    lineParts=strsplit(fld,delim);
+    if(~isempty(lineParts)&&length(lineParts)>1)
+        headerField=lineParts{1};
+
+        headerField(strfind(headerField,' '))='_';
+        headerField(strfind(headerField,'['))='_';
+        headerField(strfind(headerField,']'))=[];
+
+        vals=lineParts(2:end);
+        vals=vals(~ismissing(vals));
+
+        vals_num=str2double(vals);
+        vals_num_idx=find(~isnan(vals_num));
+
+        for z=1:length(vals_num_idx)
+            vals{vals_num_idx(z)}=vals_num(vals_num_idx(z));
+        end
+
+        if(length(vals)==1)
+            vals=vals{1};
+        end
+
+        info=setfield(info,headerField,vals);
+        
+        if(~isempty(strfind(headerField,'Probe')) || ~isempty(strfind(headerField,'EXT_AD')))
+            %break
+        end
+        
+    else
+        %continue;
+    end
+    
+
+
+end
+%%
+
+
+% Get the Data
+%data=nan(1e6,numDataParts);
+
+% build scan header
+
+dataLineParts=strsplit(lineData1,delim);
+
+f=[]; 
+isNum=true(1,numDataParts);
+for i=1:numDataParts
+    if(contains(dataLineParts{i},':')) % find time segment
+        f=[f '%s '];
+
+        isNum(i)=false;
+    else
+        f=[f '%f '];
+    end
+end
+
+
+% This is faster then getting the data from the TData cell
+%% 
+frewind(fid);
+while(1) % skip headers
+    l=fgetl(fid); 
+    if(contains(l,'PreScan'))
+        break
+    end
+end
+
+if(~isempty(f))
+    data=textscan(fid,f,'delimiter',delim);
+    datetimeCol=data{(isNum==1)};
+    mrkData=data{mrkCol};
+    data=horzcat(data{isNum});
+else
+    disp('Data is empty!');
+    data=[];
+    mrkData=[];
+end
+%% 
+
+
+
+
+
+
+end
